@@ -19,14 +19,13 @@
  ******************************************************************************/
 package com.microsoft.aad.adal4j;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.net.ssl.SSLSocketFactory;
 import java.net.Proxy;
 import java.util.HashMap;
 import java.util.Map;
-
-import javax.net.ssl.SSLSocketFactory;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 class UserDiscoveryRequest {
 
@@ -42,8 +41,8 @@ class UserDiscoveryRequest {
     static UserDiscoveryResponse execute(final String uri, final Proxy proxy,
             final SSLSocketFactory sslSocketFactory) throws Exception {
 
-        String response = HttpHelper.executeHttpGet(log, uri, HEADERS, proxy,
-                sslSocketFactory);
+        String response = HttpHelper.executeHttpGetCA(/*log,*/ uri, HEADERS/*, proxy,
+                sslSocketFactory*/);
         return JsonHelper.convertJsonToObject(response,
                 UserDiscoveryResponse.class);
     }

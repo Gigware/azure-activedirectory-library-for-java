@@ -19,22 +19,64 @@
  ******************************************************************************/
 package com.microsoft.aad.adal4j;
 
-import java.io.BufferedReader;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.impl.client.HttpClients;
+import org.slf4j.Logger;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLSocketFactory;
+import java.io.*;
 import java.net.MalformedURLException;
 import java.net.Proxy;
 import java.net.URL;
 import java.util.Map;
 
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLSocketFactory;
-
-import org.slf4j.Logger;
-
 class HttpHelper {
+
+    static String executeHttpGetCA(final String url, final Map<String, String> headers)
+            throws Exception {
+        URL finalUrl = new URL(url);
+
+        HttpClient client = HttpClients.createDefault();
+        HttpUriRequest httpUriRequest = new HttpGet(finalUrl.toURI());
+
+        if(headers != null) {
+            for(String key : headers.keySet()) {
+                httpUriRequest.setHeader(key, headers.get(key));
+            }
+        }
+
+        HttpResponse res = client.execute(httpUriRequest);
+
+        return readResponseCA(res);
+    }
+
+    static String readResponseCA(HttpResponse response) throws IOException {
+        final Reader inReader = new InputStreamReader(response.getEntity().getContent());
+        final BufferedReader reader = new BufferedReader(inReader);
+        final char[] buffer = new char[256];
+        final StringBuilder out = new StringBuilder();
+
+        try {
+            if (response.getStatusLine().getStatusCode() != 200) {
+                throw new IOException("Failed: HTTP error code "
+                        + response.getStatusLine().getStatusCode());
+            }
+
+            int rsz = -1;
+            while ((rsz = reader.read(buffer, 0, buffer.length)) > -1) {
+                out.append(buffer, 0, rsz);
+            }
+        }
+        finally {
+            reader.close();
+        }
+
+        return out.toString();
+    }
 
     static String executeHttpGet(final Logger log, final String url,
             final Proxy proxy, final SSLSocketFactory sslSocketFactory)

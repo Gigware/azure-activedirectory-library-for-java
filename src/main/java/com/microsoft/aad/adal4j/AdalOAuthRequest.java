@@ -34,6 +34,12 @@ import java.util.Map;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLSocketFactory;
 
+import org.apache.http.Header;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.EntityBuilder;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,20 +79,104 @@ class AdalOAuthRequest extends HTTPRequest {
     }
 
     /**
-     * 
+     * CloudAware overrided for environment restrictions compatibility
      */
     @Override
     public HTTPResponse send() throws IOException {
-
-        final HttpsURLConnection conn = HttpHelper.openConnection(this.getURL(),
-                this.proxy, this.sslSocketFactory);
-        this.configureHeaderAndExecuteOAuthCall(conn);
-        final String out = this.processAndReadResponse(conn);
-        HttpHelper.verifyReturnedCorrelationId(log, conn,
-                this.extraHeaderParams
-                        .get(ClientDataHttpHeaders.CORRELATION_ID_HEADER_NAME));
-        return createResponse(conn, out);
+        try {
+            HttpClient client = HttpClients.createDefault();
+            HttpPost httpUriRequest = new HttpPost(this.getURL().toURI());
+            this.preparePostCA(httpUriRequest);
+            HttpResponse res = client.execute(httpUriRequest);
+            return this.convertResponseCA(res);
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
     }
+
+    public void preparePostCA(HttpPost request) {
+        if (this.getAuthorization() != null) {
+            request.setHeader("Authorization", this.getAuthorization());
+        }
+
+        if (this.extraHeaderParams != null && !this.extraHeaderParams.isEmpty()) {
+            for (java.util.Map.Entry<String, String> entry : this.extraHeaderParams
+                    .entrySet()) {
+                if (entry.getValue() == null || entry.getValue().isEmpty()) {
+                    continue;
+                }
+                request.setHeader(entry.getKey(), entry.getValue());
+            }
+        }
+
+        request.setHeader("Content-Type",
+                CommonContentTypes.APPLICATION_URLENCODED.toString());
+
+        if (this.getQuery() != null) {
+            request.setEntity(
+                    EntityBuilder
+                            .create()
+                            .setBinary(
+                                    this.getQuery().getBytes()
+                            ).build()
+            );
+
+        }
+    }
+
+    public HTTPResponse convertResponseCA(HttpResponse response) throws IOException {
+        HTTPResponse out = new HTTPResponse(response.getStatusLine().getStatusCode());
+
+        String responseString = HttpHelper.readResponseCA(response);
+
+        final String location = response.getFirstHeader("Location") == null ? null : response.getFirstHeader("Location").getValue();
+        if (location != null && location.length() > 0) {
+            out.setLocation(new URL(location));
+        }
+
+        try {
+            Header contenTypeHeader = response.getFirstHeader("Content-Type");
+            if (contenTypeHeader != null) {
+                out.setContentType(contenTypeHeader.getValue());
+            }
+        } catch (final ParseException e) {
+            throw new IOException("Couldn't parse Content-Type header: "
+                    + e.getMessage(), e);
+        }
+
+        Header cacheControlHeader = response.getFirstHeader("Cache-Control");
+        if (cacheControlHeader != null) {
+            out.setContent(cacheControlHeader.getValue());
+        }
+
+        Header pragmaHeader = response.getFirstHeader("Pragma");
+        if (pragmaHeader != null) {
+            out.setPragma(pragmaHeader.getValue());
+        }
+
+        Header wwwAuthHeader = response.getFirstHeader("WWW-Authenticate");
+        if (wwwAuthHeader != null) {
+            out.setWWWAuthenticate(wwwAuthHeader.getValue());
+        }
+        if (!StringHelper.isBlank(responseString)) {
+            out.setContent(responseString);
+        }
+
+        return out;
+    }
+
+    //microsoft version
+//    public HTTPResponse send() throws IOException {
+//
+//        final HttpsURLConnection conn = HttpHelper.openConnection(this.getURL(),
+//                this.proxy, this.sslSocketFactory);
+//        this.configureHeaderAndExecuteOAuthCall(conn);
+//        final String out = this.processAndReadResponse(conn);
+//        HttpHelper.verifyReturnedCorrelationId(log, conn,
+//                this.extraHeaderParams
+//                        .get(ClientDataHttpHeaders.CORRELATION_ID_HEADER_NAME));
+//        return createResponse(conn, out);
+//    }
 
     HTTPResponse createResponse(final HttpURLConnection conn, final String out)
             throws IOException {
